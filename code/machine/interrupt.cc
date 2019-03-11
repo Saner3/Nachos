@@ -292,7 +292,6 @@ Interrupt::CheckIfDue(bool advanceClock)
 {
     MachineStatus old = status;
     int when;
-
     ASSERT(level == IntOff);		// interrupts need to be disabled,
 					// to invoke an interrupt handler
     if (DebugIsEnabled('i'))
@@ -310,7 +309,6 @@ Interrupt::CheckIfDue(bool advanceClock)
 	pending->SortedInsert(toOccur, when);
 	return FALSE;
     }
-
 // Check if there is nothing more to do, and if so, quit
     if ((status == IdleMode) && (toOccur->type == TimerInt) 
 				&& pending->IsEmpty()) {

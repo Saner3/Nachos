@@ -20,6 +20,7 @@
 #include "synch.h"
 #include "system.h"
 #include "unistd.h"
+
 #define STACK_FENCEPOST 0xdeadbeef	// this is put at the top of the
 					// execution stack, for detecting 
 					// stack overflows
@@ -33,7 +34,7 @@
 //	"threadName" is an arbitrary string, useful for debugging.
 //----------------------------------------------------------------------
 
-Thread::Thread(char* threadName)
+Thread::Thread(char* threadName, int prio, int ticks)
 {
     name = threadName;
     stackTop = NULL;
@@ -41,13 +42,15 @@ Thread::Thread(char* threadName)
     status = JUST_CREATED;
     UID = getuid();
     TID = AllocateTID();
+    priority = prio;
+    allowedTicks = ticks;
+    usedTicks = 0;
     if (TID < 0)
     {
         printf("Error: threads' number exceeds limit!\n");
         ASSERT(TID > 0);
     }
-    else
-    {
+    else{
         allThreads[TID] = this;
     }
 #ifdef USER_PROGRAM
@@ -109,6 +112,7 @@ Thread::Fork(VoidFunctionPtr func, int arg)
     scheduler->ReadyToRun(this);	// ReadyToRun assumes that interrupts 
 					// are disabled!
     (void) interrupt->SetLevel(oldLevel);
+    currentThread->Yield();
 }    
 
 //----------------------------------------------------------------------
@@ -193,12 +197,20 @@ Thread::Yield ()
     ASSERT(this == currentThread);
     
     DEBUG('t', "Yielding thread \"%s\"\n", getName());
-    
+    /*
     nextThread = scheduler->FindNextToRun();
     if (nextThread != NULL) {
 	scheduler->ReadyToRun(this);
 	scheduler->Run(nextThread);
-    }
+    }*/
+
+    //---------------Lab 2---------------
+    scheduler->ReadyToRun(this);
+    nextThread = scheduler->FindNextToRun();
+    if (nextThread != this)
+        scheduler->Run(nextThread);
+    // else, still run itself.
+    //-------------end Lab 2---------------
     (void) interrupt->SetLevel(oldLevel);
 }
 
@@ -249,7 +261,6 @@ Thread::Sleep ()
 static void ThreadFinish()    { currentThread->Finish(); }
 static void InterruptEnable() { interrupt->Enable(); }
 void ThreadPrint(int arg){ Thread *t = (Thread *)arg; t->Print(); }
-
 //----------------------------------------------------------------------
 // Thread::StackAllocate
 //	Allocate and initialize an execution stack.  The stack is
@@ -330,18 +341,5 @@ Thread::RestoreUserState()
     for (int i = 0; i < NumTotalRegs; i++)
 	machine->WriteRegister(i, userRegisters[i]);
 }
+
 #endif
-
-//--------Lab 1-------------
-int 
-Thread::getUID()
-{
-    return UID;
-}
-
-int 
-Thread::getTID()
-{
-    return TID;
-}
-//-------end Lab 1-------------

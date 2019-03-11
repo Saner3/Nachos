@@ -31,6 +31,8 @@ class Scheduler {
   private:
     List *readyList;  		// queue of threads that are ready to run,
 				// but not running
+    List *notimeList;     // queue of threads that are ready to run,
+        // but have used up pf their time slice.
 };
 
 #endif // SCHEDULER_H

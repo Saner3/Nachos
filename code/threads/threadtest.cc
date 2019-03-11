@@ -40,9 +40,12 @@ SimpleThread(int which)
 void
 DoNothing(int which)
 {
-    printf("*** thread %d UID %d TID %d\n", which, currentThread->getUID(), currentThread->getTID());
+    printf("*** thread %s UID %d TID %d\n", currentThread->getName(), currentThread->getUID(), currentThread->getTID());
 }
 
+//-----------
+// ts command
+//-----------
 void 
 ThreadStatus(int which)
 {
@@ -72,6 +75,39 @@ ThreadStatus(int which)
             };
             printf("%4d %4d %12s %s\n", allThreads[i]->getTID(), allThreads[i]->getUID(), status_string, allThreads[i]->getName());
         }
+    }
+}
+
+/*
+void
+ForkingOther1(int which)    // for ThreadTest4 Priority
+{
+    int currentPriority = currentThread->getPriority();
+    printf("hello from thread %s\n", currentThread->getName());
+    printf("%s is forking a thread of greater priority\n", currentThread->getName());
+    Thread *t = new Thread("C", currentPriority - 1);
+    t->Fork(DoNothing, 1);
+    printf("goodbye from thread %s\n", currentThread->getName());
+}*/
+
+void
+ForkingOther2(int which)    // for ThreadTest5 RoundRobin
+{
+    int currentPriority = currentThread->getPriority();
+    printf("hello from thread %s\n", currentThread->getName());
+    printf("%s is forking a thread of 3\n", currentThread->getName());
+    Thread *t = new Thread("C", currentPriority, 3);
+    t->Fork(DoNothing, 1);
+    printf("goodbye from thread %s\n", currentThread->getName());
+}
+
+void WasteTime(int which)
+{
+    for (int i=0; i<30; ++i)
+    {
+        interrupt->SetLevel(IntOff);
+        printf("%d from thread %s\n", i, currentThread->getName());
+        interrupt->SetLevel(IntOn);
     }
 }
 //----------------------------------------------------------------------
@@ -133,6 +169,34 @@ ThreadTest3()
 
 //-------end Lab 1-------------
 
+//---------Lab 2-------------
+
+/*  // Priority
+void
+ThreadTest4()
+{
+    DEBUG('t', "Entering ThreadTest4");
+    int currentPriority = currentThread->getPriority();
+    printf("hello from thread %s\n", currentThread->getName());
+    printf("%s is forking a thread of greater priority\n", currentThread->getName());
+    Thread *t = new Thread("B", currentPriority - 1);
+    t->Fork(ForkingOther, 1);
+    printf("goodbye from thread %s\n", currentThread->getName());
+}
+*/
+
+void
+ThreadTest5()   // RoundRobin
+{
+    DEBUG('t', "Entering ThreadTest5");
+    int currentPriority = currentThread->getPriority();
+    printf("hello from thread %s\n", currentThread->getName());
+    printf("%s is forking a thread of 3 timeslice\n", currentThread->getName());
+    Thread *t = new Thread("B", currentPriority-1, 3);
+    t->Fork(WasteTime, 1);
+    printf("goodbye from thread %s\n", currentThread->getName());
+}
+//-------end Lab 2-------------
 
 //----------------------------------------------------------------------
 // ThreadTest
@@ -151,6 +215,13 @@ ThreadTest()
 	break;
     case 3:
     ThreadTest3();
+    break;
+    /*
+    case 4:
+    ThreadTest4();
+    break;*/
+    case 5:
+    ThreadTest5();
     break;
     default:
 	printf("No test specified.\n");

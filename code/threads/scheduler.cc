@@ -30,6 +30,10 @@
 Scheduler::Scheduler()
 { 
     readyList = new List; 
+    // -------Lab 2 ------
+    notimeList = new List; 
+    // If a thread used all its time slice, put it in this list
+    //--------end Lab2----
 } 
 
 //----------------------------------------------------------------------
@@ -39,7 +43,10 @@ Scheduler::Scheduler()
 
 Scheduler::~Scheduler()
 { 
-    delete readyList; 
+    delete readyList;
+    // -------Lab 2 ------
+    delete notimeList;
+    //--------end Lab2---- 
 } 
 
 //----------------------------------------------------------------------
@@ -56,7 +63,17 @@ Scheduler::ReadyToRun (Thread *thread)
     DEBUG('t', "Putting thread %s on ready list.\n", thread->getName());
 
     thread->setStatus(READY);
-    readyList->Append((void *)thread);
+
+    //readyList->Append((void *)thread);
+    //------------Lab 2--------------
+    if (thread->ifDue())
+    {
+        thread->resetTicks();
+        notimeList->SortedInsert((void *)thread, thread->getPriority());
+    }else{
+        readyList->SortedInsert((void *)thread, thread->getPriority());
+    }
+    //----------end Lab 2--------------
 }
 
 //----------------------------------------------------------------------
@@ -67,10 +84,30 @@ Scheduler::ReadyToRun (Thread *thread)
 //	Thread is removed from the ready list.
 //----------------------------------------------------------------------
 
+void ThreadResetTicks(int arg){ Thread *t = (Thread *)arg; t->resetTicks(); }
+
 Thread *
 Scheduler::FindNextToRun ()
 {
-    return (Thread *)readyList->Remove();
+    //return (Thread *)readyList->Remove();
+    // ------------Lab 2------------
+    Thread *find;
+    if (!readyList->IsEmpty())
+        find = (Thread *)(readyList->Remove());
+    else{
+        if (!notimeList->IsEmpty()){
+            // swap these two List
+            List *tmp = readyList;
+            readyList = notimeList;
+            notimeList = tmp;
+            find = (Thread *)(readyList->Remove());
+        }
+        else{
+            find = NULL;
+        }
+    }
+    // ------------end Lab 2------------
+    return find;
 }
 
 //----------------------------------------------------------------------

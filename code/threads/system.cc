@@ -64,8 +64,20 @@ extern void Cleanup();
 static void
 TimerInterruptHandler(int dummy)
 {
+    /*
     if (interrupt->getStatus() != IdleMode)
-	interrupt->YieldOnReturn();
+    interrupt->YieldOnReturn();
+    */
+    
+    // ---------Lab 2-----------
+    if (interrupt->getStatus() != IdleMode)
+    {   
+        currentThread->tick();
+        printf("%s used up one time slice\n", currentThread->getName());
+        if (currentThread->ifDue())
+            interrupt->YieldOnReturn();
+    }
+    //--------end Lab2----------
 }
 
 //----------------------------------------------------------------------
@@ -137,7 +149,7 @@ Initialize(int argc, char **argv)
     stats = new Statistics();			// collect statistics
     interrupt = new Interrupt;			// start up interrupt handling
     scheduler = new Scheduler();		// initialize the ready queue
-    if (randomYield)				// start the timer (if needed)
+    //if (randomYield)				// start the timer (if needed)
 	timer = new Timer(TimerInterruptHandler, 0, randomYield);
 
     threadToBeDestroyed = NULL;

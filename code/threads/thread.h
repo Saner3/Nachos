@@ -81,7 +81,7 @@ class Thread {
     int machineState[MachineStateSize];  // all registers except for stackTop
 
   public:
-    Thread(char* debugName);		// initialize a Thread 
+    Thread(char* debugName, int prio=32, int ticks=1);		// initialize a Thread 
     ~Thread(); 				// deallocate a Thread
 					// NOTE -- thread being deleted
 					// must not be running when delete 
@@ -101,11 +101,18 @@ class Thread {
     void setStatus(ThreadStatus st) { status = st; }
     ThreadStatus getStatus(){return status;}
     char* getName() { return (name); }
-    void Print() { printf("thread name:%s, tid:%d, uid:%d, state:%s\n", name, TID, UID, status); }
+    void Print() { printf("thread name:%s, tid:%d, uid:%d, priority:%d\n", name, TID, UID, priority); }
     //--------Lab 1-------------
-    int getUID();
-    int getTID();
+    int getUID() {return UID;}
+    int getTID() {return TID;}
     //------end Lab 1-------------
+
+    //--------Lab 2-------------
+    int getPriority() {return priority;}
+    bool ifDue() {return usedTicks >= allowedTicks;}
+    int tick() {usedTicks++;}
+    void resetTicks() {usedTicks = 0;}
+    //------end Lab 2-------------
 
   private:
     // some of the private data for this class is listed above
@@ -117,7 +124,13 @@ class Thread {
     char* name;
     //--------Lab 1-------------
     int UID,TID;
-    //------end Lab 1-------------
+    //------end Lab 1-----------
+
+    //--------Lab 2-------------
+    int priority;
+    int allowedTicks;
+    int usedTicks;
+    //------end Lab 2-----------
     void StackAllocate(VoidFunctionPtr func, int arg);
     					// Allocate a stack for thread.
 					// Used internally by Fork()
