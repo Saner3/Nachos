@@ -73,7 +73,8 @@ TimerInterruptHandler(int dummy)
     if (interrupt->getStatus() != IdleMode)
     {   
         currentThread->tick();
-        printf("%s used up one time slice\n", currentThread->getName());
+        DEBUG('t', "Thread %s used up one time slice\n", currentThread->getName());
+        //printf("Thread %s used up one time slice\n", currentThread->getName());
         if (currentThread->ifDue())
             interrupt->YieldOnReturn();
     }
@@ -107,7 +108,7 @@ Initialize(int argc, char **argv)
     double rely = 1;		// network reliability
     int netname = 0;		// UNIX socket name
 #endif
-    
+
     for (argc--, argv++; argc > 0; argc -= argCount, argv += argCount) {
 	argCount = 1;
 	if (!strcmp(*argv, "-d")) {

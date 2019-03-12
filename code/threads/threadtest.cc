@@ -11,6 +11,7 @@
 
 #include "copyright.h"
 #include "system.h"
+#include "synch.h"
 
 // testnum is set in main.cc
 int testnum = 1;
@@ -22,7 +23,6 @@ int testnum = 1;
 //	"which" is simply a number identifying the thread, for debugging
 //	purposes.
 //----------------------------------------------------------------------
-
 void
 SimpleThread(int which)
 {
@@ -44,7 +44,7 @@ DoNothing(int which)
 }
 
 //-----------
-// ts command
+// ts command, lab 1
 //-----------
 void 
 ThreadStatus(int which)
@@ -80,7 +80,7 @@ ThreadStatus(int which)
 
 /*
 void
-ForkingOther1(int which)    // for ThreadTest4 Priority
+ForkingOther(int which)    // for ThreadTest4 Priority, lab 2
 {
     int currentPriority = currentThread->getPriority();
     printf("hello from thread %s\n", currentThread->getName());
@@ -90,17 +90,7 @@ ForkingOther1(int which)    // for ThreadTest4 Priority
     printf("goodbye from thread %s\n", currentThread->getName());
 }*/
 
-void
-ForkingOther2(int which)    // for ThreadTest5 RoundRobin
-{
-    int currentPriority = currentThread->getPriority();
-    printf("hello from thread %s\n", currentThread->getName());
-    printf("%s is forking a thread of 3\n", currentThread->getName());
-    Thread *t = new Thread("C", currentPriority, 3);
-    t->Fork(DoNothing, 1);
-    printf("goodbye from thread %s\n", currentThread->getName());
-}
-
+// WasteTime: re-enable interrupt to pass away the time
 void WasteTime(int which)
 {
     for (int i=0; i<30; ++i)
@@ -110,6 +100,109 @@ void WasteTime(int which)
         interrupt->SetLevel(IntOn);
     }
 }
+
+//--------Lab 3---------
+// using semaphore or condition var
+// to solve producer-consumer problem
+//
+List *resources_buffer;
+Semaphore *resources_empty;
+Semaphore *resources_full;
+Semaphore *resources_mutex;
+
+Lock *condition_mutex;
+Condition *condition_full;
+Condition *condition_empty;
+int empty_buffer, total_buffer;
+
+void buffer_print_item(int item){
+    printf("%d ", item);
+}
+void produce_semaphore(int which)
+{
+    int yieldOrNot = Random()%2;
+    if (yieldOrNot){
+        printf("%s wants to yield CPU\n", currentThread->getName());
+        currentThread->Yield();
+    }
+    int resource = Random();
+    //printf("producer %d produces item %d\n", which, resource);
+    // is there empty buffer?
+    resources_empty->P();
+    resources_mutex->P();
+    resources_buffer->Append((void *)resource);
+    printf("producer %d puts item %d in buffer\ncurrent buffer: ", which, resource);
+    resources_buffer->Mapcar(buffer_print_item);
+    printf("\n");
+    resources_mutex->V();
+    resources_full->V();
+}
+
+void consume_semaphore(int which)
+{
+    int yieldOrNot = Random()%2;
+    if (yieldOrNot){
+        printf("%s wants to yield CPU\n", currentThread->getName());
+        currentThread->Yield();
+    }
+    //printf("consumer %d wants to take an item\n", which);
+    //printf("\n");
+    // take a resource away
+    resources_full->P();
+    resources_mutex->P();
+    int resource = (int)resources_buffer->Remove();
+    printf("consumer %d takes item %d from buffer\ncurrent buffer: ", which, resource);
+    resources_buffer->Mapcar(buffer_print_item);
+    printf("\n");
+    resources_mutex->V(); 
+    resources_empty->V();
+}
+void produce_condition(int which)
+{
+    int yieldOrNot = Random()%2;
+    if (yieldOrNot){
+        //printf("%s wants to yield CPU\n", currentThread->getName());
+        currentThread->Yield();
+    }
+    int resource = Random();
+    //printf("%s produces item %d\n", currentThread->getName(), resource);
+    condition_mutex->Acquire();
+    while (empty_buffer == 0){
+        condition_empty->Wait(condition_mutex);
+    }
+    resources_buffer->Append((void *)resource);
+    empty_buffer --;
+    printf("%s puts item %d in buffer\ncurrent buffer: ", currentThread->getName(), resource);
+    resources_buffer->Mapcar(buffer_print_item);
+    printf("\n");
+    if (empty_buffer == total_buffer-1){
+        condition_full->Broadcast(condition_mutex);
+    }
+    condition_mutex->Release();
+}
+
+void consume_condition(int which)
+{
+    int yieldOrNot = Random()%2;
+    if (yieldOrNot){
+        //printf("%s wants to yield CPU\n", currentThread->getName());
+        currentThread->Yield();
+    }
+    //printf("%s wants to take an item\n", currentThread->getName());
+    condition_mutex->Acquire();
+    while (empty_buffer == total_buffer)
+        condition_full->Wait(condition_mutex);
+    int resource = (int)resources_buffer->Remove();
+    empty_buffer ++;
+    printf("%s takes item %d from buffer\ncurrent buffer: ", currentThread->getName(), resource);
+    resources_buffer->Mapcar(buffer_print_item);
+    printf("\n");
+    if (empty_buffer == 1)
+        condition_empty->Broadcast(condition_mutex);
+    condition_mutex->Release();
+}
+//-------end Lab 3---------
+
 //----------------------------------------------------------------------
 // ThreadTest1
 // 	Set up a ping-pong between two threads, by forking a thread 
@@ -198,6 +291,63 @@ ThreadTest5()   // RoundRobin
 }
 //-------end Lab 2-------------
 
+//------------Lab 3------------
+void
+ThreadTest6()   // Producer Consumer semaphore
+{
+    resources_buffer = new List();
+    resources_mutex = new Semaphore("mutex", 1);
+    resources_full = new Semaphore("full", 0);
+    resources_empty = new Semaphore("empty", 3);    // assume there are 3 buffers
+
+    // create 10 producer and 10 consumers
+    Thread *producers[10];
+    Thread *consumers[10];
+    for (int i=0; i<10; ++i){
+        producers[i] = new Thread("producer");
+        //printf("producer %d TID %d ready\n", i, producers[i]->getTID());
+        producers[i]->Fork(produce_semaphore, i);
+    }
+
+    for (int i=0; i<10; ++i){
+        consumers[i] = new Thread("consumer");
+        //printf("consumer %d TID %d ready\n", i, consumers[i]->getTID());
+        consumers[i]->Fork(consume_semaphore, i);
+    }
+}
+
+void
+ThreadTest7()   // Producer Consumer semaphore
+{
+    resources_buffer = new List();
+    empty_buffer = total_buffer = 3;
+    condition_mutex = new Lock("mutex");
+    condition_empty = new Condition("empty");
+    condition_full = new Condition("full");
+
+    // create 10 producer and 10 consumers
+    Thread *producers[10];
+    Thread *consumers[10];
+    char producerName[10][100];
+    char consumerName[10][100];
+    for (int i=0; i<10; ++i){
+        sprintf(producerName[i], "producer %d\0", i);
+        producers[i] = new Thread(producerName[i]);
+        //printf("%s ready\n", producerName[i]);
+        producers[i]->Fork(produce_condition, i);
+        //producers[i]->Fork(WasteTime, i);
+    }
+
+    for (int i=0; i<10; ++i){
+        sprintf(consumerName[i], "consumer %d\0", i);
+        consumers[i] = new Thread(consumerName[i]);
+        //printf("%s ready\n", consumerName[i]);
+        consumers[i]->Fork(consume_condition, i);
+        //consumers[i]->Fork(WasteTime, i);
+    }
+    printf("main finishes...\n");
+}
+//------------end Lab 3------------
 //----------------------------------------------------------------------
 // ThreadTest
 // 	Invoke a test routine.
@@ -222,6 +372,12 @@ ThreadTest()
     break;*/
     case 5:
     ThreadTest5();
+    break;
+    case 6:
+    ThreadTest6();
+    break;
+    case 7:
+    ThreadTest7();
     break;
     default:
 	printf("No test specified.\n");

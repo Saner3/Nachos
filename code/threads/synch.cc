@@ -100,13 +100,66 @@ Semaphore::V()
 // Dummy functions -- so we can compile our later assignments 
 // Note -- without a correct implementation of Condition::Wait(), 
 // the test case in the network assignment won't work!
-Lock::Lock(char* debugName) {}
-Lock::~Lock() {}
-void Lock::Acquire() {}
-void Lock::Release() {}
 
-Condition::Condition(char* debugName) { }
-Condition::~Condition() { }
-void Condition::Wait(Lock* conditionLock) { ASSERT(FALSE); }
-void Condition::Signal(Lock* conditionLock) { }
-void Condition::Broadcast(Lock* conditionLock) { }
+// ------ Lab 3 (all below) ---------
+Lock::Lock(char* debugName) {
+    name = debugName;
+    lock = new Semaphore(debugName, 1);
+    owner = NULL;
+}
+Lock::~Lock() {
+    delete lock;
+}
+void Lock::Acquire() {
+    DEBUG('t', "%s wants lock %s\n", currentThread->getName(), name);
+    lock->P();
+    DEBUG('t', "%s acquires lock %s\n", currentThread->getName(), name);
+    owner = currentThread;
+}
+void Lock::Release() {
+    ASSERT(isHeldByCurrentThread());
+    DEBUG('t', "%s releases lock %s\n", currentThread->getName(), name);
+    owner = NULL;
+    lock->V();
+}
+bool Lock::isHeldByCurrentThread(){return owner == currentThread;}
+
+Condition::Condition(char* debugName) {
+    name = debugName;
+    waitlist = new List();
+}
+Condition::~Condition() {
+    delete waitlist;
+}
+void Condition::Wait(Lock* conditionLock) {
+    IntStatus oldLevel = interrupt->SetLevel(IntOff);
+    ASSERT(conditionLock->isHeldByCurrentThread());
+    conditionLock->Release();
+    DEBUG('t', "%s waits on list %s\n", currentThread->getName(), name);
+    waitlist->Append((void *)currentThread);
+    currentThread->Sleep();
+    conditionLock->Acquire();
+    (void)interrupt->SetLevel(oldLevel);
+}
+void Condition::Signal(Lock* conditionLock) {
+    IntStatus oldLevel = interrupt->SetLevel(IntOff);
+    ASSERT(conditionLock->isHeldByCurrentThread());
+    if (!waitlist->IsEmpty())
+    {
+        Thread* waitingThread = (Thread*)waitlist->Remove();
+        DEBUG('t', "%s signals %s on list %s\n", currentThread->getName(), waitingThread->getName(), name);
+        scheduler->ReadyToRun(waitingThread);
+    }
+    (void)interrupt->SetLevel(oldLevel);
+}
+void Condition::Broadcast(Lock* conditionLock) {
+    IntStatus oldLevel = interrupt->SetLevel(IntOff);
+    ASSERT(conditionLock->isHeldByCurrentThread());
+    Thread* waitingThread;
+    while (!waitlist->IsEmpty())
+    {
+        waitingThread = (Thread*)waitlist->Remove();
+        scheduler->ReadyToRun(waitingThread);
+    }
+    (void)interrupt->SetLevel(oldLevel);
+}

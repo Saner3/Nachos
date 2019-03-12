@@ -73,7 +73,7 @@ Thread::Thread(char* threadName, int prio, int ticks)
 Thread::~Thread()
 {
     DEBUG('t', "Deleting thread \"%s\"\n", name);
-
+    //printf("Deleting %s\n", this->getName());
     ASSERT(this != currentThread);
     if (stack != NULL)
 	DeallocBoundedArray((char *) stack, StackSize * sizeof(int));
@@ -162,9 +162,7 @@ Thread::Finish ()
 {
     (void) interrupt->SetLevel(IntOff);		
     ASSERT(this == currentThread);
-    
     DEBUG('t', "Finishing thread \"%s\"\n", getName());
-    
     threadToBeDestroyed = currentThread;
     Sleep();					// invokes SWITCH
     // not reached
@@ -207,9 +205,13 @@ Thread::Yield ()
     //---------------Lab 2---------------
     scheduler->ReadyToRun(this);
     nextThread = scheduler->FindNextToRun();
-    if (nextThread != this)
-        scheduler->Run(nextThread);
-    // else, still run itself.
+    if (nextThread != NULL){
+        if (nextThread == this)
+            scheduler->RemoveFirstThread();
+            // still run itself
+        else
+            scheduler->Run(nextThread);
+    }
     //-------------end Lab 2---------------
     (void) interrupt->SetLevel(oldLevel);
 }
@@ -242,11 +244,11 @@ Thread::Sleep ()
     ASSERT(interrupt->getLevel() == IntOff);
     
     DEBUG('t', "Sleeping thread \"%s\"\n", getName());
-
+    //printf("Sleeping %s\n", getName());
     status = BLOCKED;
     while ((nextThread = scheduler->FindNextToRun()) == NULL)
 	interrupt->Idle();	// no one to run, wait for an interrupt
-        
+
     scheduler->Run(nextThread); // returns when we've been signalled
 }
 

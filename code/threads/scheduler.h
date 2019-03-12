@@ -27,7 +27,12 @@ class Scheduler {
 					// list, if any, and return thread.
     void Run(Thread* nextThread);	// Cause nextThread to start running
     void Print();			// Print contents of ready list
-    
+    //---Lab2---
+    void RemoveFirstThread(){readyList->Remove();}  
+        // when the highest-priority process Yield(), it put himself in Readylist,
+        // but his is still the one to run, so we simply remove this from Readylist and 
+        // continues running.
+    //--- end Lab 2---
   private:
     List *readyList;  		// queue of threads that are ready to run,
 				// but not running

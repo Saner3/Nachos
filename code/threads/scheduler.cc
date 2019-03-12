@@ -60,17 +60,17 @@ Scheduler::~Scheduler()
 void
 Scheduler::ReadyToRun (Thread *thread)
 {
-    DEBUG('t', "Putting thread %s on ready list.\n", thread->getName());
-
     thread->setStatus(READY);
 
     //readyList->Append((void *)thread);
     //------------Lab 2--------------
     if (thread->ifDue())
     {
+        DEBUG('t', "Putting thread %s on notime-ready-List.\n", thread->getName());
         thread->resetTicks();
         notimeList->SortedInsert((void *)thread, thread->getPriority());
     }else{
+        DEBUG('t', "Putting thread %s on ready list.\n", thread->getName());
         readyList->SortedInsert((void *)thread, thread->getPriority());
     }
     //----------end Lab 2--------------
@@ -84,19 +84,19 @@ Scheduler::ReadyToRun (Thread *thread)
 //	Thread is removed from the ready list.
 //----------------------------------------------------------------------
 
-void ThreadResetTicks(int arg){ Thread *t = (Thread *)arg; t->resetTicks(); }
-
 Thread *
 Scheduler::FindNextToRun ()
 {
     //return (Thread *)readyList->Remove();
     // ------------Lab 2------------
     Thread *find;
+    //Print();
     if (!readyList->IsEmpty())
         find = (Thread *)(readyList->Remove());
     else{
         if (!notimeList->IsEmpty()){
             // swap these two List
+            DEBUG('t', "No thread in Ready List, Swap two lists.\n");
             List *tmp = readyList;
             readyList = notimeList;
             notimeList = tmp;
@@ -149,7 +149,6 @@ Scheduler::Run (Thread *nextThread)
     // in switch.s.  You may have to think
     // a bit to figure out what happens after this, both from the point
     // of view of the thread and from the perspective of the "outside world".
-
     SWITCH(oldThread, nextThread);
     
     DEBUG('t', "Now in thread \"%s\"\n", currentThread->getName());
