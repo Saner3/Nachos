@@ -61,7 +61,6 @@ void
 Scheduler::ReadyToRun (Thread *thread)
 {
     thread->setStatus(READY);
-
     //readyList->Append((void *)thread);
     //------------Lab 2--------------
     if (thread->ifDue())

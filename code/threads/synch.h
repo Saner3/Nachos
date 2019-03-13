@@ -139,4 +139,20 @@ class Condition {
     List *waitlist;
     // plus some other stuff you'll need to define
 };
+
+// Read Write Lock
+class ReaderWriterLock {
+    public:
+        ReaderWriterLock();
+        ~ReaderWriterLock();
+        void ReaderAcquire();
+        void ReaderRelease();
+        void WriterAcquire();
+        void WriterRelease();
+    private:
+        int ReaderCnt;
+        Lock *mutex;    // protect ReaderCnt
+        Lock *write;    // protect write operation
+};
+
 #endif // SYNCH_H

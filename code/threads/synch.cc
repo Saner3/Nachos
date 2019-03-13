@@ -163,3 +163,45 @@ void Condition::Broadcast(Lock* conditionLock) {
     }
     (void)interrupt->SetLevel(oldLevel);
 }
+
+//-----
+// ReaderWriterLock
+//  Readers can read together
+//  Writers can not write with any other reader or writer
+//  Using two locks to implement.
+//-----
+ReaderWriterLock::ReaderWriterLock()
+{
+    mutex = new Lock("mutex");
+    write = new Lock("write");
+    ReaderCnt = 0;
+}
+ReaderWriterLock::~ReaderWriterLock()
+{
+    delete mutex;
+    delete write;
+}
+void ReaderWriterLock::ReaderAcquire()
+{
+    mutex->Acquire();
+    ReaderCnt ++;
+    if (ReaderCnt == 1)
+        write->Acquire();
+    mutex->Release();
+}
+void ReaderWriterLock::ReaderRelease()
+{
+    mutex->Acquire();
+    ReaderCnt --;
+    if (ReaderCnt == 0)
+        write->Release();
+    mutex->Release();
+}
+void ReaderWriterLock::WriterAcquire()
+{
+    write->Acquire();
+}
+void ReaderWriterLock::WriterRelease()
+{
+    write->Release();
+}

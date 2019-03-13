@@ -78,9 +78,10 @@ ThreadStatus(int which)
     }
 }
 
-/*
+
+// for ThreadTest4, Priority, lab 2
 void
-ForkingOther(int which)    // for ThreadTest4 Priority, lab 2
+ForkingOther(int which)
 {
     int currentPriority = currentThread->getPriority();
     printf("hello from thread %s\n", currentThread->getName());
@@ -88,7 +89,7 @@ ForkingOther(int which)    // for ThreadTest4 Priority, lab 2
     Thread *t = new Thread("C", currentPriority - 1);
     t->Fork(DoNothing, 1);
     printf("goodbye from thread %s\n", currentThread->getName());
-}*/
+}
 
 // WasteTime: re-enable interrupt to pass away the time
 void WasteTime(int which)
@@ -131,7 +132,7 @@ void produce_semaphore(int which)
     resources_empty->P();
     resources_mutex->P();
     resources_buffer->Append((void *)resource);
-    printf("producer %d puts item %d in buffer\ncurrent buffer: ", which, resource);
+    printf("%s puts item %d in buffer\ncurrent buffer: ", currentThread->getName(), resource);
     resources_buffer->Mapcar(buffer_print_item);
     printf("\n");
     resources_mutex->V();
@@ -151,7 +152,7 @@ void consume_semaphore(int which)
     resources_full->P();
     resources_mutex->P();
     int resource = (int)resources_buffer->Remove();
-    printf("consumer %d takes item %d from buffer\ncurrent buffer: ", which, resource);
+    printf("%s takes item %d from buffer\ncurrent buffer: ", currentThread->getName(), resource);
     resources_buffer->Mapcar(buffer_print_item);
     printf("\n");
     resources_mutex->V(); 
@@ -200,6 +201,69 @@ void consume_condition(int which)
     if (empty_buffer == 1)
         condition_empty->Broadcast(condition_mutex);
     condition_mutex->Release();
+}
+
+//-----
+// barrier, Lab 3 
+//-----
+int barrier_reach_cnt, barrier_total_thread_cnt;
+Semaphore *barrier_mutex;
+Semaphore *barrier_door;
+void barrier(int total_threads_num){
+    barrier_mutex->P();
+    barrier_reach_cnt += 1;
+    if (barrier_reach_cnt == total_threads_num){
+        barrier_mutex->V();
+        barrier_door->V();
+    }
+    else{
+        barrier_mutex->V();
+    }
+    barrier_door->P();
+    barrier_door->V();
+};
+
+void barrier_test(int which){
+    int yield_time = Random()%50;
+    for (int i=0; i<yield_time; ++i){
+        printf("%s yield %d time\n", currentThread->getName(), i);
+        currentThread->Yield();
+    }
+    barrier(barrier_total_thread_cnt);
+    printf("%s Success!\n");
+}
+
+//----
+// routines to test ReadWriteLock
+//---
+int Book;
+ReaderWriterLock *rwlock;
+
+void reader(int which)
+{
+    for (int i=0; i<10; ++i){
+        int YieldOrNot = Random();
+        if (YieldOrNot%2 == 0)
+            currentThread->Yield();
+        rwlock->ReaderAcquire();
+        int content = Book;
+        printf("%s reads content %d\n", currentThread->getName(), content);
+        rwlock->ReaderRelease();
+    }
+}
+
+void writer(int which)
+{
+    for (int i=0; i<10; ++i){
+        int YieldOrNot = Random();
+        if (YieldOrNot%2 == 0)
+            currentThread->Yield();
+        rwlock->WriterAcquire();
+        int content = Random();
+        Book = content;
+        printf("%s writes %d to content\n", currentThread->getName(), content);
+        rwlock->WriterRelease();
+    }
 }
 //-------end Lab 3---------
 
@@ -264,7 +328,7 @@ ThreadTest3()
 
 //---------Lab 2-------------
 
-/*  // Priority
+// Priority
 void
 ThreadTest4()
 {
@@ -272,11 +336,11 @@ ThreadTest4()
     int currentPriority = currentThread->getPriority();
     printf("hello from thread %s\n", currentThread->getName());
     printf("%s is forking a thread of greater priority\n", currentThread->getName());
-    Thread *t = new Thread("B", currentPriority - 1);
+    Thread *t = new Thread("B", currentPriority - 1, 1);
     t->Fork(ForkingOther, 1);
     printf("goodbye from thread %s\n", currentThread->getName());
 }
-*/
+
 
 void
 ThreadTest5()   // RoundRobin
@@ -347,6 +411,39 @@ ThreadTest7()   // Producer Consumer semaphore
     }
     printf("main finishes...\n");
 }
+
+// Test Barrier
+void 
+ThreadTest8()
+{
+    barrier_mutex = new Semaphore("mutex", 1);
+    barrier_door = new Semaphore("door", 0);    // no one can pass at first
+    barrier_reach_cnt = 0;
+    barrier_total_thread_cnt = 30;
+    Thread *threadsBarrier[50];
+    char threadsBarrierName[50][50];
+    for (int i=0; i<barrier_total_thread_cnt; ++i){
+        sprintf(threadsBarrierName[i], "soldier %d\0", i);
+        threadsBarrier[i] = new Thread(threadsBarrierName[i]);
+        threadsBarrier[i]->Fork(barrier_test, i);
+    }
+}
+
+// Test ReadWriteLock
+void 
+ThreadTest9()
+{
+    rwlock = new ReaderWriterLock();
+    Book = 10086;   // what to read;
+    Thread *r1 = new Thread("reader 1");
+    Thread *r2 = new Thread("reader 2");
+    Thread *w1 = new Thread("writer 1");
+    Thread *w2 = new Thread("writer 2");
+    r1->Fork(reader, 1);
+    w1->Fork(writer, 2);
+    r2->Fork(reader, 3);
+    w2->Fork(writer, 4);
+}
 //------------end Lab 3------------
 //----------------------------------------------------------------------
 // ThreadTest
@@ -366,10 +463,11 @@ ThreadTest()
     case 3:
     ThreadTest3();
     break;
-    /*
     case 4:
-    ThreadTest4();
-    break;*/
+    ThreadTest4();  // this might be wrong, because 
+                    // current scheduler is round-robin
+                    // but not priority-preempt
+    break;
     case 5:
     ThreadTest5();
     break;
@@ -379,6 +477,11 @@ ThreadTest()
     case 7:
     ThreadTest7();
     break;
+    case 8:
+    ThreadTest8();
+    break;
+    case 9:
+    ThreadTest9();
     default:
 	printf("No test specified.\n");
 	break;
