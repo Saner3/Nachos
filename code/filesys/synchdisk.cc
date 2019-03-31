@@ -45,6 +45,9 @@ SynchDisk::SynchDisk(char* name)
     semaphore = new Semaphore("synch disk", 0);
     lock = new Lock("synch disk lock");
     disk = new Disk(name, DiskRequestDone, (int) this);
+    RWLock = new ReaderWriterLock();
+    for (int i=0; i<NumSectors; ++i) fileOpenCount[i] = 0;
+    fileOpenCountLock = new Lock("fileOpenCount lock");
 }
 
 //----------------------------------------------------------------------
@@ -106,4 +109,22 @@ void
 SynchDisk::RequestDone()
 { 
     semaphore->V();
+}
+
+void SynchDisk::CountPlus(int sec){
+    fileOpenCountLock->Acquire();
+    fileOpenCount[sec] ++;
+    fileOpenCountLock->Release();
+}
+void SynchDisk::CountSub(int sec){
+    fileOpenCountLock->Acquire();
+    fileOpenCount[sec] --;
+    fileOpenCountLock->Release();
+}
+bool SynchDisk::CountZero(int sec){
+    bool isZero = FALSE;
+    fileOpenCountLock->Acquire();
+    isZero = (fileOpenCount[sec] == 0);
+    fileOpenCountLock->Release();
+    return isZero;
 }

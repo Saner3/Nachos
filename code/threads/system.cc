@@ -73,8 +73,7 @@ TimerInterruptHandler(int dummy)
     if (interrupt->getStatus() != IdleMode)
     {   
         currentThread->tick();
-        DEBUG('t', "Thread %s used up one time slice\n", currentThread->getName());
-        //printf("Thread %s used up one time slice\n", currentThread->getName());
+        //DEBUG('t', "Thread %s used up one time slice\n", currentThread->getName());
         if (currentThread->ifDue())
             interrupt->YieldOnReturn();
     }

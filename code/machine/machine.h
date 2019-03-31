@@ -25,6 +25,7 @@
 #include "utility.h"
 #include "translate.h"
 #include "disk.h"
+#include "bitmap.h"
 
 // Definitions related to the size, and format of user memory
 
@@ -32,7 +33,8 @@
 					// the disk sector size, for
 					// simplicity
 
-#define NumPhysPages    32
+#define NumPhysPages 32 // physical page of the machine
+#define maxPhyPages 15  // max physical page number for a single thread
 #define MemorySize 	(NumPhysPages * PageSize)
 #define TLBSize		4		// if there is a TLB, make it small
 
@@ -146,7 +148,20 @@ class Machine {
     void Debugger();		// invoke the user program debugger
     void DumpState();		// print the user CPU and memory state 
 
+    // ------lab 4 ---------
+    int AllocPhyPage();    // allocate a free physical page 
+    void DeallocPhyPage(int which);  // deallocate a used physical page
 
+#ifdef REVERSE
+    void InitRevPageTable(){
+        pageTable = new TranslationEntry[NumPhysPages];
+        for (int i=0; i<NumPhysPages; ++i){
+            pageTable[i].valid = FALSE;
+        }
+        pageTableSize = NumPhysPages;
+    }
+#endif
+    // ----end lab 4 ---------
 // Data structures -- all of these are accessible to Nachos kernel code.
 // "public" for convenience.
 //
@@ -156,8 +171,9 @@ class Machine {
     char *mainMemory;		// physical memory to store user program,
 				// code and data, while executing
     int registers[NumTotalRegs]; // CPU registers, for executing user programs
-
-
+    // ------lab 4 ---------
+    BitMap *phyBitmap;
+    // ----end lab 4 ---------
 // NOTE: the hardware translation of virtual addresses in the user program
 // to physical addresses (relative to the beginning of "mainMemory")
 // can be controlled by one of:
@@ -181,7 +197,11 @@ class Machine {
 
     TranslationEntry *pageTable;
     unsigned int pageTableSize;
-
+    // ------ lab 4 ---------
+    int tlb_miss;
+    int tlb_hit;
+    int *tlb_LRUqueue;
+    // ----end lab 4 ---------
   private:
     bool singleStep;		// drop back into the debugger after each
 				// simulated instruction

@@ -21,6 +21,9 @@
 
 #define FileNameMaxLen 		9	// for simplicity, we assume 
 					// file names are <= 9 characters long
+#define FileLongNameMaxLen  256 // we assume long file names are <= 256 characters long
+#define FileLongNamePerEntry 14
+#define NumDirEntries       10
 
 // The following class defines a "directory entry", representing a file
 // in the directory.  Each entry gives the name of the file, and where
@@ -31,11 +34,27 @@
 
 class DirectoryEntry {
   public:
-    bool inUse;				// Is this directory entry in use?
-    int sector;				// Location on disk to find the 
-					//   FileHeader for this file 
-    char name[FileNameMaxLen + 1];	// Text name for file, with +1 for 
-					// the trailing '\0'
+    // lab 5
+    bool isLong;    
+    // end lab 5
+    bool inUse;    // Is this directory entry in use?{}
+    union {
+        struct{
+            bool beginLong; //   is this entry the beginning
+                            // of a long name file ?
+            bool type;     // 0: normal file
+                   // 1: directory 
+            char shortname[FileNameMaxLen + 1];	// Text name for file, with +1 for 
+        					// the trailing '\0'
+            int sector;             // Location on disk to find the 
+                            //   FileHeader for this file  
+        };
+        struct{
+            bool lastEntry; // is this entry the last
+                            // long name entry?
+            char longname[FileLongNamePerEntry + 1];
+        };
+    };
 };
 
 // The following class defines a UNIX-like "directory".  Each entry in
@@ -61,7 +80,7 @@ class Directory {
     int Find(char *name);		// Find the sector number of the 
 					// FileHeader for file: "name"
 
-    bool Add(char *name, int newSector);  // Add a file name into the directory
+    bool Add(char *name, int newSector, bool dir=FALSE);  // Add a file name into the directory
 
     bool Remove(char *name);		// Remove a file from the directory
 
@@ -70,7 +89,10 @@ class Directory {
     void Print();			// Verbose print of the contents
 					//  of the directory -- all the file
 					//  names and their contents.
-
+    // lab 5
+    char *getName(int i);
+    void DividePath(char **path, char **first, char **second);
+    // end lab 5
   private:
     int tableSize;			// Number of directory entries
     DirectoryEntry *table;		// Table of pairs: 

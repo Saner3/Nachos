@@ -74,7 +74,7 @@ class FileSystem {
 					// the disk, so initialize the directory
     					// and the bitmap of free blocks.
 
-    bool Create(char *name, int initialSize);  	
+    bool Create(char *name, int initialSize, bool dir=FALSE);  	
 					// Create a file (UNIX creat)
 
     OpenFile* Open(char *name); 	// Open a file (UNIX open)
@@ -84,6 +84,7 @@ class FileSystem {
     void List();			// List all the files in the file system
 
     void Print();			// List all the files and their contents
+    bool Extend(OpenFile* openfile, int newSize);
 
   private:
    OpenFile* freeMapFile;		// Bit map of free disk blocks,

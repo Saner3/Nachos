@@ -16,8 +16,12 @@
 
 #include "disk.h"
 #include "bitmap.h"
-
-#define NumDirect 	((SectorSize - 2 * sizeof(int)) / sizeof(int))
+#include <time.h>
+// used to be ((SectorSize - 2 * sizeof(int)) / sizeof(int))
+#define NumDirect 	((SectorSize - 3 * sizeof(int) - 3 * sizeof(time_t)) / sizeof(int))
+#define NumDirectTable 3   // # of secondary index table
+#define NumDirectI  (NumDirect - NumDirectTable) // # of direct index
+#define NumDirectII (SectorSize / sizeof(int))  // how many entries in secondary index table
 #define MaxFileSize 	(NumDirect * SectorSize)
 
 // The following class defines the Nachos "file header" (in UNIX terms,  
@@ -56,11 +60,30 @@ class FileHeader {
 
     void Print();			// Print the contents of the file.
 
+    bool Extend(BitMap *bitMap, int newSize);
+    void SetDataSector(int idx, int val){ 
+        dataSectors[idx] = val;
+    }
+    //-----lab 5------
+    void SetCreateTime(){time(&createTime);}
+    void SetLastAccessTime(){time(&lastAccessTime);}
+    void SetLastModifyTime(){time(&lastModifyTime);}
+    void SetHdrSector(int sec){hdrSector = sec;}
+    int GetHdrSector(){return hdrSector;}
+    void UpdateBytes(int bytes){numBytes += bytes;}
+    //----end lab 5---
   private:
     int numBytes;			// Number of bytes in the file
     int numSectors;			// Number of data sectors in the file
+    int hdrSector;
+    //-----lab 5------
+    time_t createTime;
+    time_t lastAccessTime;
+    time_t lastModifyTime;
+    //----end lab 5---
     int dataSectors[NumDirect];		// Disk sector numbers for each data 
 					// block in the file
+    
 };
 
 #endif // FILEHDR_H

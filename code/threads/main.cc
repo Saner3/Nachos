@@ -98,6 +98,7 @@ main(int argc, char **argv)
         testnum = 1;
         break;
       }
+      break;    // this break is made to enable filesys in lab 5;
     }
     
     ThreadTest();

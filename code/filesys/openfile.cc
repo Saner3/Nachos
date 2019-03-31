@@ -32,6 +32,8 @@ OpenFile::OpenFile(int sector)
     hdr = new FileHeader;
     hdr->FetchFrom(sector);
     seekPosition = 0;
+    // add count
+    synchDisk->CountPlus(sector);
 }
 
 //----------------------------------------------------------------------
@@ -41,6 +43,8 @@ OpenFile::OpenFile(int sector)
 
 OpenFile::~OpenFile()
 {
+    // add count
+    synchDisk->CountSub(hdr->GetHdrSector());
     delete hdr;
 }
 
@@ -74,17 +78,28 @@ OpenFile::Seek(int position)
 int
 OpenFile::Read(char *into, int numBytes)
 {
-   int result = ReadAt(into, numBytes, seekPosition);
-   seekPosition += result;
-   return result;
+    synchDisk->ReaderAcquire();
+    int result = ReadAt(into, numBytes, seekPosition);
+    into[result] = '\0';
+    printf("Content read by %s (%d Bytes): %s\n", currentThread->getName(), result, into);
+    seekPosition += result;
+    synchDisk->ReaderRelease();
+    // for test
+    currentThread->Yield();
+    return result;
 }
 
 int
 OpenFile::Write(char *into, int numBytes)
 {
-   int result = WriteAt(into, numBytes, seekPosition);
-   seekPosition += result;
-   return result;
+    synchDisk->WriterAcquire();
+    int result = WriteAt(into, numBytes, seekPosition);
+    seekPosition += result;
+    printf("Write %s to file by %s (%d Bytes)\n", into, currentThread->getName(), numBytes);
+    synchDisk->WriterRelease();
+    // for test
+    currentThread->Yield();
+    return result;
 }
 
 //----------------------------------------------------------------------
@@ -116,6 +131,10 @@ OpenFile::Write(char *into, int numBytes)
 int
 OpenFile::ReadAt(char *into, int numBytes, int position)
 {
+    // --- lab 5 ---
+    // update access time 
+    hdr->SetLastAccessTime();
+    // -- end lab 5 ---
     int fileLength = hdr->FileLength();
     int i, firstSector, lastSector, numSectors;
     char *buf;
@@ -146,15 +165,27 @@ OpenFile::ReadAt(char *into, int numBytes, int position)
 int
 OpenFile::WriteAt(char *from, int numBytes, int position)
 {
+    // --- lab 5 ---
+    // update modify time 
+    hdr->SetLastAccessTime();
+    hdr->SetLastModifyTime();
+    // -- end lab 5 ---
     int fileLength = hdr->FileLength();
     int i, firstSector, lastSector, numSectors;
     bool firstAligned, lastAligned;
     char *buf;
 
-    if ((numBytes <= 0) || (position >= fileLength))
+    // if ((numBytes <= 0) || (position >= fileLength))
+    if ((numBytes <= 0) || (position > fileLength))
 	return 0;				// check request
-    if ((position + numBytes) > fileLength)
-	numBytes = fileLength - position;
+    
+    if ((position + numBytes) > fileLength){
+    	//numBytes = fileLength - position;
+        if (!fileSystem->Extend(this, numBytes)){
+            printf("Fail to extend file length\n");
+            return 0;
+        }
+    }
     DEBUG('f', "Writing %d bytes at %d, from file of length %d.\n", 	
 			numBytes, position, fileLength);
 
@@ -194,4 +225,21 @@ int
 OpenFile::Length() 
 { 
     return hdr->FileLength(); 
+}
+
+// accessing hdr in OpenFile is strange ...
+void 
+OpenFile::SetDataSector(int idx, int var)
+{
+    hdr->SetDataSector(idx, var);
+}
+void
+OpenFile::WriteBackHdr()
+{
+    hdr->WriteBack(hdr->GetHdrSector());
+}
+void 
+OpenFile::UpdateBytes(int bytes)
+{
+    hdr->UpdateBytes(bytes);
 }

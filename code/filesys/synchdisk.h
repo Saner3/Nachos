@@ -41,13 +41,23 @@ class SynchDisk {
     void RequestDone();			// Called by the disk device interrupt
 					// handler, to signal that the
 					// current disk operation is complete.
-
+    void ReaderAcquire(){RWLock->ReaderAcquire();}
+    void ReaderRelease(){RWLock->ReaderRelease();}
+    void WriterAcquire(){RWLock->WriterAcquire();}
+    void WriterRelease(){RWLock->WriterRelease();}
+    void CountPlus(int sec);
+    void CountSub(int sec);
+    bool CountZero(int sec);
   private:
     Disk *disk;		  		// Raw disk device
     Semaphore *semaphore; 		// To synchronize requesting thread 
 					// with the interrupt handler
     Lock *lock;		  		// Only one read/write request
 					// can be sent to the disk at a time
+    // Lab 5
+    ReaderWriterLock *RWLock;
+    int fileOpenCount[NumSectors];
+    Lock *fileOpenCountLock;
 };
 
 #endif // SYNCHDISK_H

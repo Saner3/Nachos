@@ -155,7 +155,6 @@ int
 OpenForWrite(char *name)
 {
     int fd = open(name, O_RDWR|O_CREAT|O_TRUNC, 0666);
-
     ASSERT(fd >= 0); 
     return fd;
 }
@@ -479,8 +478,8 @@ AllocBoundedArray(int size)
     int pgSize = getpagesize();
     char *ptr = new char[pgSize * 2 + size];
 
-    //mprotect(ptr, pgSize, 0);
-    //mprotect(ptr + pgSize + size, pgSize, 0);
+    mprotect(ptr, pgSize, 0);
+    mprotect(ptr + pgSize + size, pgSize, 0);
     return ptr + pgSize;
 }
 

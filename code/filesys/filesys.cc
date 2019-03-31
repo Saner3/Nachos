@@ -46,6 +46,7 @@
 #include "copyright.h"
 
 #include "disk.h"
+#include "synchdisk.h"
 #include "bitmap.h"
 #include "directory.h"
 #include "filehdr.h"
@@ -61,7 +62,7 @@
 // supports extensible files, the directory size sets the maximum number 
 // of files that can be loaded onto the disk.
 #define FreeMapFileSize 	(NumSectors / BitsInByte)
-#define NumDirEntries 		10
+//#define NumDirEntries 		10   // now defined in directory.h 
 #define DirectoryFileSize 	(sizeof(DirectoryEntry) * NumDirEntries)
 
 //----------------------------------------------------------------------
@@ -76,6 +77,7 @@
 //
 //	"format" -- should we initialize the disk?
 //----------------------------------------------------------------------
+extern SynchDisk   *synchDisk;
 
 FileSystem::FileSystem(bool format)
 { 
@@ -83,8 +85,8 @@ FileSystem::FileSystem(bool format)
     if (format) {
         BitMap *freeMap = new BitMap(NumSectors);
         Directory *directory = new Directory(NumDirEntries);
-	FileHeader *mapHdr = new FileHeader;
-	FileHeader *dirHdr = new FileHeader;
+	    FileHeader *mapHdr = new FileHeader;
+	    FileHeader *dirHdr = new FileHeader;
 
         DEBUG('f', "Formatting the file system.\n");
 
@@ -103,6 +105,12 @@ FileSystem::FileSystem(bool format)
     // We need to do this before we can "Open" the file, since open
     // reads the file header off of disk (and currently the disk has garbage
     // on it!).
+
+    // set creation time
+    // ---- lab 5 ----
+    mapHdr->SetCreateTime();
+    dirHdr->SetCreateTime();
+    // --end lab 5 ----
 
         DEBUG('f', "Writing headers back to disk.\n");
 	mapHdr->WriteBack(FreeMapSector);    
@@ -130,9 +138,9 @@ FileSystem::FileSystem(bool format)
 	    directory->Print();
 
         delete freeMap; 
-	delete directory; 
-	delete mapHdr; 
-	delete dirHdr;
+    	delete directory; 
+    	delete mapHdr; 
+    	delete dirHdr;
 	}
     } else {
     // if we are not formatting the disk, just open the files representing
@@ -172,7 +180,7 @@ FileSystem::FileSystem(bool format)
 //----------------------------------------------------------------------
 
 bool
-FileSystem::Create(char *name, int initialSize)
+FileSystem::Create(char *name, int initialSize, bool dir)
 {
     Directory *directory;
     BitMap *freeMap;
@@ -185,29 +193,44 @@ FileSystem::Create(char *name, int initialSize)
     directory = new Directory(NumDirEntries);
     directory->FetchFrom(directoryFile);
 
-    if (directory->Find(name) != -1)
-      success = FALSE;			// file is already in directory
+    if (dir)
+        initialSize = DirectoryFileSize;
+
+    if (directory->Find(name) != -1){
+        success = FALSE;			// file is already in directory
+    }
     else {	
         freeMap = new BitMap(NumSectors);
         freeMap->FetchFrom(freeMapFile);
         sector = freeMap->Find();	// find a sector to hold the file header
     	if (sector == -1) 		
             success = FALSE;		// no free block for file header 
-        else if (!directory->Add(name, sector))
+        else if (!directory->Add(name, sector, dir)){
             success = FALSE;	// no space in directory
-	else {
-    	    hdr = new FileHeader;
-	    if (!hdr->Allocate(freeMap, initialSize))
-            	success = FALSE;	// no space on disk for data
-	    else {	
-	    	success = TRUE;
-		// everthing worked, flush all changes back to disk
+        }
+    	else {
+            hdr = new FileHeader;
+    	    if (!hdr->Allocate(freeMap, initialSize))
+                success = FALSE;	// no space on disk for data
+    	    else {	
+    	    	success = TRUE;
+                // ---- lab 5 ----
+                hdr->SetCreateTime();
+                hdr->SetHdrSector(sector);
+                // --end lab 5 ----
+    		// everthing worked, flush all changes back to disk
     	    	hdr->WriteBack(sector); 		
     	    	directory->WriteBack(directoryFile);
     	    	freeMap->WriteBack(freeMapFile);
-	    }
+                // if create a new directory, we should initialize this directory
+                if (dir){
+                    Directory *newdirectory = new Directory(NumDirEntries);
+                    OpenFile *newdirectoryFile = new OpenFile(sector);
+                    newdirectory->WriteBack(newdirectoryFile);
+                }
+    	    }
             delete hdr;
-	}
+    	}
         delete freeMap;
     }
     delete directory;
@@ -268,6 +291,11 @@ FileSystem::Remove(char *name)
     if (sector == -1) {
        delete directory;
        return FALSE;			 // file not found 
+    }
+    if (!synchDisk->CountZero(sector))
+    {
+        printf("can't remove because it is still opened by some other thread\n");
+        return FALSE;
     }
     fileHdr = new FileHeader;
     fileHdr->FetchFrom(sector);
@@ -339,3 +367,45 @@ FileSystem::Print()
     delete freeMap;
     delete directory;
 } 
+
+bool FileSystem::Extend(OpenFile* openfile, int newSize){
+    int numBytes = openfile->Length();
+    int curSize = numBytes + newSize;
+    int curSectorNum = divRoundUp(curSize, SectorSize);
+    int oldSectorNum = divRoundUp(numBytes, SectorSize);
+    if (oldSectorNum == curSectorNum){
+        // we do not need to allocate new sector
+        // but have to update numBytes
+        openfile->UpdateBytes(newSize);
+        openfile->WriteBackHdr();
+        return TRUE;
+    }
+    int newSectorsNum = curSectorNum - oldSectorNum;
+    BitMap *freeMap = new BitMap(NumSectors);
+    freeMap->FetchFrom(freeMapFile);
+
+    if (freeMap->NumClear() < newSectorsNum){
+        delete freeMap;
+        return FALSE;
+    }
+
+    if (curSectorNum < NumDirectI){
+        for (int i = 0; i < newSectorsNum; ++i){
+            int newsector = freeMap->Find();
+            openfile->SetDataSector(oldSectorNum + i, newsector);
+            printf("allocating sector %d to file\n", newsector);
+        }
+        openfile->UpdateBytes(newSize);
+        freeMap->WriteBack(freeMapFile);
+        openfile->WriteBackHdr();
+        delete freeMap;
+        return TRUE;
+    }
+    else {
+        // using secondary index
+        // not implemented yet;
+        delete freeMap;
+        return FALSE;
+    }
+
+}

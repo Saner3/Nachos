@@ -26,7 +26,6 @@
 
 #include "system.h"
 #include "filehdr.h"
-
 //----------------------------------------------------------------------
 // FileHeader::Allocate
 // 	Initialize a fresh file header for a newly created file.
@@ -41,14 +40,42 @@
 bool
 FileHeader::Allocate(BitMap *freeMap, int fileSize)
 { 
+
     numBytes = fileSize;
     numSectors  = divRoundUp(fileSize, SectorSize);
-    if (freeMap->NumClear() < numSectors)
-	return FALSE;		// not enough space
+    if (numSectors <= NumDirectI){
+        if (freeMap->NumClear() < numSectors)
+	       return FALSE;		// not enough space
+        for (int i = 0; i < numSectors; i++)
+        dataSectors[i] = freeMap->Find();
+        return TRUE;
+    }
+    else {
+        // how many secondary index Table do we need ?
+        int secondaryTableNum = divRoundUp((numSectors - NumDirectI), NumDirectII);
+        ASSERT(secondaryTableNum <= NumDirectTable);
+        if (freeMap->NumClear() < numSectors + secondaryTableNum)   
+           return FALSE;        // not enough space
+        int k = 0;    // number of allocated sectors
 
-    for (int i = 0; i < numSectors; i++)
-	dataSectors[i] = freeMap->Find();
-    return TRUE;
+        // we need secondary index table
+        // fisrt, allocate all direct indexs
+        for (int i = 0; i < NumDirectI; i++, k++)
+            dataSectors[i] = freeMap->Find();
+
+        // then, allocate secondary index table
+        for (int i = 0; i < secondaryTableNum; ++i){
+            int secondaryIndexTable[NumDirectII] = {0};
+            dataSectors[NumDirectI + i] = freeMap->Find();
+            for (int j = 0; j < NumDirectII && k < numSectors; ++j,++k){
+                secondaryIndexTable[j] = freeMap->Find();
+            }
+            SetLastAccessTime();
+            SetLastModifyTime();
+            synchDisk->WriteSector(dataSectors[NumDirectI + i], (char *)secondaryIndexTable); 
+        }
+        return TRUE;
+    }
 }
 
 //----------------------------------------------------------------------
@@ -61,10 +88,37 @@ FileHeader::Allocate(BitMap *freeMap, int fileSize)
 void 
 FileHeader::Deallocate(BitMap *freeMap)
 {
-    for (int i = 0; i < numSectors; i++) {
-	ASSERT(freeMap->Test((int) dataSectors[i]));  // ought to be marked!
-	freeMap->Clear((int) dataSectors[i]);
+    if (numSectors <= NumDirectI){
+        for (int i = 0; i < numSectors; i++) {
+            ASSERT(freeMap->Test((int) dataSectors[i]));  // ought to be marked!
+            freeMap->Clear((int) dataSectors[i]);
+        }
+    
     }
+    else {
+        // secondary index table is used
+        int secondaryTableNum = divRoundUp((numSectors - NumDirectI), NumDirectII);
+        for (int i = 0; i < NumDirectI; i++) {
+            ASSERT(freeMap->Test((int) dataSectors[i]));  // ought to be marked!
+            freeMap->Clear((int) dataSectors[i]);
+        }
+        for (int i=0; i<secondaryTableNum; ++i){
+            // read secondary index table to memory
+            int secondaryIndexTable[NumDirectII];
+            SetLastAccessTime();
+            synchDisk->ReadSector((int) dataSectors[NumDirectI + i], (char *)secondaryIndexTable);
+            for (int j=0; j<NumDirectII; ++j){
+                if (freeMap->Test((int) secondaryIndexTable[j]))
+                    freeMap->Clear((int) secondaryIndexTable[j]);
+                else
+                    break;
+            }
+            // deallocate sector of secondary table 
+            freeMap->Clear((int) dataSectors[NumDirectI + i]);
+        }
+    }
+
+    
 }
 
 //----------------------------------------------------------------------
@@ -78,6 +132,10 @@ void
 FileHeader::FetchFrom(int sector)
 {
     synchDisk->ReadSector(sector, (char *)this);
+    // --- lab 5 ---
+    // update access time 
+    SetLastAccessTime();
+    // -- end lab 5 ---
 }
 
 //----------------------------------------------------------------------
@@ -90,6 +148,11 @@ FileHeader::FetchFrom(int sector)
 void
 FileHeader::WriteBack(int sector)
 {
+    // --- lab 5 ---
+    // update modify time 
+    SetLastAccessTime();
+    SetLastModifyTime();
+    // -- end lab 5 ---
     synchDisk->WriteSector(sector, (char *)this); 
 }
 
@@ -106,7 +169,21 @@ FileHeader::WriteBack(int sector)
 int
 FileHeader::ByteToSector(int offset)
 {
-    return(dataSectors[offset / SectorSize]);
+    //return(dataSectors[offset / SectorSize]);
+    int sectorIndex = offset / SectorSize;
+    if (sectorIndex < NumDirectI)
+        return(dataSectors[sectorIndex]);
+    else
+    {
+        int i = (sectorIndex - NumDirectI) / NumDirectII;
+        int offoffset = (sectorIndex - NumDirectI) % NumDirectII;
+        // read secondary index table to memory
+        int secondaryIndexTable[NumDirectII];
+        SetLastAccessTime();
+        synchDisk->ReadSector((int) dataSectors[NumDirectI + i], (char *)secondaryIndexTable);
+        int sec = secondaryIndexTable[offoffset];
+        return sec;
+    }
 }
 
 //----------------------------------------------------------------------
@@ -131,20 +208,60 @@ FileHeader::Print()
 {
     int i, j, k;
     char *data = new char[SectorSize];
+    numSectors  = divRoundUp(numBytes, SectorSize);
 
-    printf("FileHeader contents.  File size: %d.  File blocks:\n", numBytes);
-    for (i = 0; i < numSectors; i++)
+    printf("FileHeader contents:\n");
+    printf("File Creation Time: %s", ctime(&createTime));
+    printf("File Last Access Time: %s", ctime(&lastAccessTime));
+    printf("File Last Modify Time: %s", ctime(&lastModifyTime));
+    printf("File size: %d\nFile blocks:\n", numBytes);
+    for (i = k = 0; i < min(numSectors, NumDirectI); i++, k++)
 	printf("%d ", dataSectors[i]);
+
+    if (numSectors > NumDirectI){
+        int secondaryTableNum = divRoundUp((numSectors - NumDirectI), NumDirectII);
+        int secondaryIndexTable[NumDirectII];
+        for (j=0; j<secondaryTableNum; ++j){
+            // read secondary index table to memory
+            SetLastAccessTime();
+            synchDisk->ReadSector((int) dataSectors[NumDirectI + j], (char *)secondaryIndexTable);
+            for (i = 0; i < NumDirectII && k < numSectors; i++, k++) {
+                printf("%d ", secondaryIndexTable[i]);
+            }
+        }
+    }
     printf("\nFile contents:\n");
-    for (i = k = 0; i < numSectors; i++) {
-	synchDisk->ReadSector(dataSectors[i], data);
+    for (i = k = 0; i < min(numSectors, NumDirectI); i++) {
+	    synchDisk->ReadSector(dataSectors[i], data);
         for (j = 0; (j < SectorSize) && (k < numBytes); j++, k++) {
-	    if ('\040' <= data[j] && data[j] <= '\176')   // isprint(data[j])
-		printf("%c", data[j]);
+    	    if ('\040' <= data[j] && data[j] <= '\176')   // isprint(data[j])
+    		    printf("%c", data[j]);
             else
-		printf("\\%x", (unsigned char)data[j]);
-	}
+    		    printf("\\%x", (unsigned char)data[j]);
+	    }
         printf("\n"); 
     }
+    if (numSectors > NumDirectI){
+        int secondaryTableNum = divRoundUp((numSectors - NumDirectI), NumDirectII);
+        int secondaryIndexTable[NumDirectII];
+        for (int t=0; t<secondaryTableNum; ++t){
+            // read secondary index table to memory
+            SetLastAccessTime();
+            synchDisk->ReadSector((int) dataSectors[NumDirectI + t], (char *)secondaryIndexTable);
+            
+            for (i = 0; i < NumDirectII; i++) {
+                synchDisk->ReadSector(secondaryIndexTable[i], data);
+                for (j = 0; (j < SectorSize) && (k < numBytes); j++, k++) {
+                    if ('\040' <= data[j] && data[j] <= '\176')   // isprint(data[j])
+                        printf("%c", data[j]);
+                    else
+                        printf("\\%x", (unsigned char)data[j]);
+                }
+                printf("\n"); 
+                if (k >= numBytes) break;
+            }
+        }
+    }
+    printf("\n");
     delete [] data;
 }

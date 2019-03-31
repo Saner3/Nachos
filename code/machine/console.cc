@@ -148,3 +148,50 @@ Console::PutChar(char ch)
     interrupt->Schedule(ConsoleWriteDone, (int)this, ConsoleTime,
 					ConsoleWriteInt);
 }
+
+
+//----------------------------------------------------------------------
+// SynchConsole
+//----------------------------------------------------------------------
+
+static void ReadAvail(int arg) { 
+    SynchConsole *synchconsole = (SynchConsole *)arg;
+    synchconsole->readAvail->V(); 
+}
+static void WriteDone(int arg) { 
+    SynchConsole *synchconsole = (SynchConsole *)arg;
+    synchconsole->writeDone->V(); 
+}
+
+SynchConsole::SynchConsole(char *readFile, char *writeFile, int callArg)
+{
+    readAvail = new Semaphore("read avail", 0);
+    writeDone = new Semaphore("write done", 0);
+    console = new Console(readFile, writeFile, ReadAvail, WriteDone, (int)this);
+    readLock = new Lock("read lock");
+    writeLock = new Lock("write lock");
+}
+
+SynchConsole::~SynchConsole(){
+    delete readLock;
+    delete writeLock;
+    delete readAvail;
+    delete writeDone;
+    delete console;
+}
+
+void SynchConsole::PutChar(char ch){
+    writeLock->Acquire();
+    console->PutChar(ch);
+    writeDone->P();
+    writeLock->Release();
+}
+
+char SynchConsole::GetChar()
+{
+    readLock->Acquire();
+    readAvail->P();  
+    char ch = console->GetChar();
+    readLock->Release();
+    return ch;
+}

@@ -111,16 +111,20 @@ Lock::~Lock() {
     delete lock;
 }
 void Lock::Acquire() {
+    IntStatus oldLevel = interrupt->SetLevel(IntOff);
     DEBUG('t', "%s wants lock %s\n", currentThread->getName(), name);
     lock->P();
     DEBUG('t', "%s acquires lock %s\n", currentThread->getName(), name);
     owner = currentThread;
+    (void) interrupt->SetLevel(oldLevel);
 }
 void Lock::Release() {
-    ASSERT(isHeldByCurrentThread());
+    IntStatus oldLevel = interrupt->SetLevel(IntOff);
     DEBUG('t', "%s releases lock %s\n", currentThread->getName(), name);
+    ASSERT(isHeldByCurrentThread());
     owner = NULL;
     lock->V();
+    (void) interrupt->SetLevel(oldLevel);
 }
 bool Lock::isHeldByCurrentThread(){return owner == currentThread;}
 
@@ -172,8 +176,8 @@ void Condition::Broadcast(Lock* conditionLock) {
 //-----
 ReaderWriterLock::ReaderWriterLock()
 {
-    mutex = new Lock("mutex");
-    write = new Lock("write");
+    mutex = new Lock("rw lock");
+    write = new Semaphore("rw-write", 1);
     ReaderCnt = 0;
 }
 ReaderWriterLock::~ReaderWriterLock()
@@ -185,23 +189,27 @@ void ReaderWriterLock::ReaderAcquire()
 {
     mutex->Acquire();
     ReaderCnt ++;
-    if (ReaderCnt == 1)
-        write->Acquire();
-    mutex->Release();
+    if (ReaderCnt == 1){
+        mutex->Release();
+        write->P();
+    }
+    else mutex->Release();
 }
 void ReaderWriterLock::ReaderRelease()
 {
     mutex->Acquire();
     ReaderCnt --;
-    if (ReaderCnt == 0)
-        write->Release();
-    mutex->Release();
+    if (ReaderCnt == 0){
+        mutex->Release();
+        write->V();
+    }
+    else mutex->Release();
 }
 void ReaderWriterLock::WriterAcquire()
 {
-    write->Acquire();
+    write->P();
 }
 void ReaderWriterLock::WriterRelease()
 {
-    write->Release();
+    write->V();
 }

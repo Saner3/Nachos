@@ -91,8 +91,11 @@ int
 Directory::FindIndex(char *name)
 {
     for (int i = 0; i < tableSize; i++)
-        if (table[i].inUse && !strncmp(table[i].name, name, FileNameMaxLen))
-	    return i;
+        if (table[i].inUse)
+        if (!table[i].isLong)
+        if (!strncmp(getName(i), name, FileLongNameMaxLen))
+	       return i;
+        
     return -1;		// name not in directory
 }
 
@@ -108,11 +111,36 @@ Directory::FindIndex(char *name)
 int
 Directory::Find(char *name)
 {
+    char *namebuffer = new char[50];
+    strcpy(namebuffer, name);
+
+    // suppose "name" can be a path: root/OS/homework/HW1
+    char *firstpart;               // root
+    char *secondpart;              // OS/homework/HW1
+    DividePath(&namebuffer, &firstpart, &secondpart);
+    ASSERT(firstpart != NULL);
+    int i = FindIndex(firstpart);
+    if (i == -1) return -1;
+
+    int sonSector = table[i].sector;
+    if (secondpart == NULL)
+        return sonSector;
+    else{
+        // else, son is a directory, FIND in son recursively
+        Directory *son = new Directory(NumDirEntries);
+        OpenFile *sonFile = new OpenFile(sonSector);
+        son->FetchFrom(sonFile);
+        int finalSector = son->Find(secondpart);
+        delete son;
+        delete sonFile;
+        return finalSector;
+    }
+    /*
     int i = FindIndex(name);
 
     if (i != -1)
 	return table[i].sector;
-    return -1;
+    return -1;*/
 }
 
 //----------------------------------------------------------------------
@@ -127,19 +155,84 @@ Directory::Find(char *name)
 //----------------------------------------------------------------------
 
 bool
-Directory::Add(char *name, int newSector)
+Directory::Add(char *name, int newSector, bool dir)
 { 
-    if (FindIndex(name) != -1)
-	return FALSE;
+    char *namebuffer = new char[50];
+    strcpy(namebuffer, name);
 
-    for (int i = 0; i < tableSize; i++)
-        if (!table[i].inUse) {
+    // suppose "name" can be a path: root/OS/homework/HW1
+    char *firstpart;               // root
+    char *secondpart;              // OS/homework/HW1
+    DividePath(&namebuffer, &firstpart, &secondpart);
+    ASSERT(firstpart != NULL);
+
+    int sonIndex = FindIndex(firstpart);
+    // if it is a directory but does not exist
+    if (sonIndex == -1 && secondpart != NULL) return FALSE;
+    // if it is a file but exist
+    if (sonIndex != -1 && secondpart == NULL) return FALSE;
+
+    if(secondpart != NULL){
+    //  son is a directory, ADD in son recursively
+        ASSERT(table[sonIndex].type == 1);
+        int sonSector = table[sonIndex].sector;
+        Directory *son = new Directory(NumDirEntries);
+        OpenFile *sonFile = new OpenFile(sonSector);
+        son->FetchFrom(sonFile);
+        int success = son->Add(secondpart, newSector, dir);
+        if (success) son->WriteBack(sonFile);
+        delete son;
+        delete sonFile;
+        return success;
+    }
+    // else, add file in this directory
+    // if (FindIndex(name) != -1)
+	// return FALSE;
+    int lenName = strlen(firstpart);
+    int numEntries = 0; // how many entries does it need?
+    if (lenName > FileNameMaxLen){
+        lenName -= FileNameMaxLen;
+        numEntries ++;
+        while (lenName > FileLongNamePerEntry){
+            lenName -= FileLongNamePerEntry;
+            numEntries ++;
+        }
+    }
+    for (int i = 0; i+numEntries < tableSize; ++i){
+        bool found = TRUE;
+        // is there consecutive numEntries free entries
+        for (int j = i; j <= i+numEntries; ++j){
+            if (table[j].inUse)
+                found = FALSE;
+        }
+        if (found) {
+            char *namecopy = firstpart;
             table[i].inUse = TRUE;
-            strncpy(table[i].name, name, FileNameMaxLen); 
+            table[i].isLong = FALSE;
+            table[i].beginLong = FALSE;
+            strncpy(table[i].shortname, namecopy, FileNameMaxLen); 
+            namecopy += FileNameMaxLen;
             table[i].sector = newSector;
-        return TRUE;
+            if (dir) table[i].type = 1;
+            else table[i].type = 0;
+            
+            // it is the beginning of a long name entry
+            if (numEntries > 0){
+                table[i].beginLong = TRUE;
+                for (int j=1; j<=numEntries; ++j){
+                    table[i+j].inUse = TRUE;
+                    table[i+j].isLong = TRUE;
+                    table[i+j].lastEntry = FALSE;
+                    strncpy(table[i+j].longname, namecopy, FileLongNamePerEntry); 
+                    namecopy += FileLongNamePerEntry;
+                }
+                table[i+numEntries].lastEntry = TRUE;
+            }
+            return TRUE;
+        }
 	}
     return FALSE;	// no space.  Fix when we have extensible files.
+    
 }
 
 //----------------------------------------------------------------------
@@ -153,11 +246,44 @@ Directory::Add(char *name, int newSector)
 bool
 Directory::Remove(char *name)
 { 
-    int i = FindIndex(name);
+    char *namebuffer = new char[50];
+    strcpy(namebuffer, name);
 
-    if (i == -1)
-	return FALSE; 		// name not in directory
+    // suppose "name" can be a path: root/OS/homework/HW1
+    char *firstpart;               // root
+    char *secondpart;              // OS/homework/HW1
+    DividePath(&namebuffer, &firstpart, &secondpart);
+    ASSERT(firstpart != NULL);
+    int i = FindIndex(firstpart);
+    // if son does not exist
+    if (i == -1) return FALSE;
+
+    if (secondpart != NULL){
+        ASSERT(table[i].type == 1);
+    //  son is a directory, REMOVE in son recursively
+        int sonSector = table[i].sector;
+        Directory *son = new Directory(NumDirEntries);
+        OpenFile *sonFile = new OpenFile(sonSector);
+        son->FetchFrom(sonFile);
+        int success = son->Remove(secondpart);
+        if (success) son->WriteBack(sonFile);
+        delete son;
+        delete sonFile;
+        return success;
+    }
+    //int i = FindIndex(name);
+
+    //if (i == -1)
+	//   return FALSE; 		// name not in directory
+    ASSERT(table[i].isLong == FALSE);
     table[i].inUse = FALSE;
+    if (table[i].beginLong){
+        while(!table[++i].lastEntry){
+            ASSERT(table[i].isLong);
+            table[i].inUse = FALSE;
+        }
+        table[i].inUse = FALSE;
+    }
     return TRUE;	
 }
 
@@ -169,9 +295,23 @@ Directory::Remove(char *name)
 void
 Directory::List()
 {
-   for (int i = 0; i < tableSize; i++)
-	if (table[i].inUse)
-	    printf("%s\n", table[i].name);
+    for (int i = 0; i < tableSize; i++)
+	if (table[i].inUse && !table[i].isLong){
+        if (table[i].type){
+	        printf("dir %s\n{", getName(i));
+            int sonSector = table[i].sector;
+            Directory *son = new Directory(NumDirEntries);
+            OpenFile *sonFile = new OpenFile(sonSector);
+            son->FetchFrom(sonFile);
+            son->List();
+            delete son;
+            delete sonFile;
+            printf("}\n");
+        }
+        else {
+            printf("file %s\n", getName(i));
+        }
+    }   
 }
 
 //----------------------------------------------------------------------
@@ -187,11 +327,70 @@ Directory::Print()
 
     printf("Directory contents:\n");
     for (int i = 0; i < tableSize; i++)
-	if (table[i].inUse) {
-	    printf("Name: %s, Sector: %d\n", table[i].name, table[i].sector);
-	    hdr->FetchFrom(table[i].sector);
-	    hdr->Print();
+	if (table[i].inUse && !table[i].isLong) {
+        if (table[i].type){
+            // directory, print recursively
+            printf("Dir %s, Sector %d:{\n", getName(i), table[i].sector);
+            int sonSector = table[i].sector;
+            Directory *son = new Directory(NumDirEntries);
+            OpenFile *sonFile = new OpenFile(sonSector);
+            son->FetchFrom(sonFile);
+            son->Print();
+            delete son;
+            delete sonFile;
+            printf("}\n");
+        }
+        else{
+    	    printf("File Name: %s, Sector: %d\n", getName(i), table[i].sector);
+    	    hdr->FetchFrom(table[i].sector);
+    	    hdr->Print();
+        }
 	}
     printf("\n");
     delete hdr;
+}
+
+//-------lab 5-------
+// Directory::getName
+//  return the name of i-th directory entry file
+//-------------------
+char *Directory::getName(int i)
+{
+    char *name = NULL;
+    ASSERT(!table[i].isLong);
+    if (!table[i].beginLong){
+        // short name
+        name = table[i].shortname;
+    }
+    else{
+        // long name
+        name = new char[FileLongNameMaxLen];
+        strcpy(name, table[i++].shortname);
+        while(!table[i].lastEntry){
+            ASSERT(i < tableSize);
+            strcat(name, table[i].longname);
+            i++;
+        }
+        ASSERT(i < tableSize);
+        strcat(name, table[i].longname);
+    }
+    return name;
+}
+
+void 
+Directory::DividePath(char **path, char **first, char **second){
+    //  path: root/OS/homework/HW1
+    //  first: root
+    //  second: OS/homework/HW1
+    char *divide = strchr((*path), '/');
+    if (divide == NULL){
+        (*first) = (*path);
+        (*second) = NULL;
+    }
+    else {
+        (*first) = (*path);
+        (*second) = divide + 1;
+        *divide = '\0';
+    }
+    return;
 }

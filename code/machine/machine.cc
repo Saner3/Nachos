@@ -61,11 +61,23 @@ Machine::Machine(bool debug)
     mainMemory = new char[MemorySize];
     for (i = 0; i < MemorySize; i++)
       	mainMemory[i] = 0;
+    phyBitmap = new BitMap(NumPhysPages);
 #ifdef USE_TLB
     tlb = new TranslationEntry[TLBSize];
     for (i = 0; i < TLBSize; i++)
-	tlb[i].valid = FALSE;
+	{
+        tlb[i].valid = FALSE;
+    }
     pageTable = NULL;
+    tlb_miss = tlb_hit = 0;
+#ifdef TLB_LRU
+    tlb_LRUqueue = new int[TLBSize];
+    for (i = 0; i < TLBSize; i++)
+        tlb_LRUqueue[i] = 0;
+#else
+    tlb_LRUqueue = NULL;
+#endif
+    
 #else	// use linear page table
     tlb = NULL;
     pageTable = NULL;
@@ -83,6 +95,7 @@ Machine::Machine(bool debug)
 Machine::~Machine()
 {
     delete [] mainMemory;
+    delete phyBitmap;
     if (tlb != NULL)
         delete [] tlb;
 }
@@ -200,15 +213,24 @@ Machine::DumpState()
 //----------------------------------------------------------------------
 
 int Machine::ReadRegister(int num)
-    {
+{
 	ASSERT((num >= 0) && (num < NumTotalRegs));
 	return registers[num];
-    }
+}
 
 void Machine::WriteRegister(int num, int value)
-    {
+{
 	ASSERT((num >= 0) && (num < NumTotalRegs));
 	// DEBUG('m', "WriteRegister %d, value %d\n", num, value);
 	registers[num] = value;
-    }
+}
 
+int Machine::AllocPhyPage(){
+    return phyBitmap->Find();
+}
+
+void Machine::DeallocPhyPage(int which){
+    ASSERT(phyBitmap->Test(which));
+    phyBitmap->Clear(which);
+    printf("Free the physical page %d\n", which);
+}

@@ -152,7 +152,8 @@ class ReaderWriterLock {
     private:
         int ReaderCnt;
         Lock *mutex;    // protect ReaderCnt
-        Lock *write;    // protect write operation
+        //Lock *write;    // protect write operation
+        Semaphore *write;
 };
 
 #endif // SYNCH_H

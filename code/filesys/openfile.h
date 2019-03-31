@@ -85,9 +85,11 @@ class OpenFile {
 					// file (this interface is simpler 
 					// than the UNIX idiom -- lseek to 
 					// end of file, tell, lseek back 
-    
+    void SetDataSector(int idx, int val);
+    void WriteBackHdr();
+    void UpdateBytes(int bytes);
   private:
-    FileHeader *hdr;			// Header for this file 
+    FileHeader *hdr;            // Header for this file 
     int seekPosition;			// Current position within the file
 };
 

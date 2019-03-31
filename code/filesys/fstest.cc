@@ -108,10 +108,16 @@ Print(char *name)
 //	  PerformanceTest -- overall control, and print out performance #'s
 //----------------------------------------------------------------------
 
-#define FileName 	"TestFile"
+#define FileName 	"TestFile" //"TestFileVeryVeryVeryVeryVeryLongName"
 #define Contents 	"1234567890"
 #define ContentSize 	strlen(Contents)
-#define FileSize 	((int)(ContentSize * 5000))
+#define FileSize 	((int)(ContentSize * 40))
+
+
+#define FileName2    "Document/Self-introduction"
+#define Contents2    "abcdefghij"
+#define ContentSize2     strlen(Contents2)
+#define FileSize2    ((int)(ContentSize2 *13))
 
 static void 
 FileWrite()
@@ -119,26 +125,67 @@ FileWrite()
     OpenFile *openFile;    
     int i, numBytes;
 
-    printf("Sequential write of %d byte file, in %d byte chunks\n", 
-	FileSize, ContentSize);
+    //printf("Sequential write of %d byte file, in %d byte chunks\n", 
+	//FileSize, ContentSize);
+    /*  test recursive directory
+
+    if (!fileSystem->Create("Document", 0, TRUE)) {
+      printf("Perf test: can't create Document\n");
+      return;
+    }
+    else printf("create dir Document\n");
+
+    if (!fileSystem->Create(FileName2, FileSize2)) {
+      printf("Perf test: can't create %s\n", FileName2);
+      return;
+    } 
+    else printf("create %s\n", FileName2);
+
+    if (!fileSystem->Create("Document/Photos", 0, TRUE)) {
+      printf("Perf test: can't create Document/Photos\n");
+      return;
+    } 
+    else printf("create dir Document/Photos\n");
+    */
     if (!fileSystem->Create(FileName, 0)) {
       printf("Perf test: can't create %s\n", FileName);
       return;
     }
+    else printf("create %s\n", FileName);
+    
     openFile = fileSystem->Open(FileName);
     if (openFile == NULL) {
 	printf("Perf test: unable to open %s\n", FileName);
 	return;
     }
     for (i = 0; i < FileSize; i += ContentSize) {
+        //printf("Write %s to file by %s (%d Bytes)\n", Contents, currentThread->getName(), ContentSize);
         numBytes = openFile->Write(Contents, ContentSize);
-	if (numBytes < 10) {
-	    printf("Perf test: unable to write %s\n", FileName);
-	    delete openFile;
-	    return;
-	}
+    	if (numBytes < 10) {
+    	    printf("Perf test: unable to write %s\n", FileName);
+    	    delete openFile;
+    	    return;
+    	}
+        //else{
+        //    printf("Write 10 Bytes to file\n");
+        //}
     }
     delete openFile;	// close file
+    /*
+    openFile = fileSystem->Open(FileName2);
+    if (openFile == NULL) {
+    printf("Perf test: unable to open %s\n", FileName2);
+    return;
+    }
+    for (i = 0; i < FileSize2; i += ContentSize2) {
+        numBytes = openFile->Write(Contents2, ContentSize2);
+        if (numBytes < 10) {
+            printf("Perf test: unable to write %s\n", FileName2);
+            delete openFile;
+            return;
+        }
+    }
+    delete openFile;    // close file*/
 }
 
 static void 
@@ -158,24 +205,99 @@ FileRead()
     }
     for (i = 0; i < FileSize; i += ContentSize) {
         numBytes = openFile->Read(buffer, ContentSize);
+    /*
 	if ((numBytes < 10) || strncmp(buffer, Contents, ContentSize)) {
 	    printf("Perf test: unable to read %s\n", FileName);
 	    delete openFile;
 	    delete [] buffer;
 	    return;
-	}
+	}*/
+    if (numBytes < 10) {
+        printf("Perf test: unable to read %s\n", FileName);
+        delete openFile;
+        delete [] buffer;
+        return;
+    }
+    //buffer[numBytes] = '\0';
+    //printf("Content read by %s (%d Bytes): %s\n", currentThread->getName(), numBytes, buffer);
     }
     delete [] buffer;
     delete openFile;	// close file
 }
 
+void 
+TestWrite(int which){
+    OpenFile *openFile;    
+    int i, numBytes;
+    
+    openFile = fileSystem->Open(FileName);
+    if (openFile == NULL) {
+    printf("Perf test: unable to open %s\n", FileName);
+    return;
+    }
+    
+    for (i = 0; i < FileSize2; i += ContentSize2) {
+        char ContentsDIY[11];
+        sprintf(ContentsDIY, "$%04d$%04d", which, i);
+        //printf("Write %s to file by %s (%d Bytes)\n", Contents2, currentThread->getName(), ContentSize2);
+        numBytes = openFile->Write(ContentsDIY, ContentSize2);
+        if (numBytes < 10) {
+            printf("Perf test: unable to write %s\n", FileName);
+            delete openFile;
+            return;
+        }
+    }
+    delete openFile;    // close file
+    fileSystem->Remove(FileName);
+}
+
+void 
+TestRead(int which)
+{
+    OpenFile *openFile;    
+    char *buffer = new char[ContentSize2];
+    int i, numBytes;
+
+    if ((openFile = fileSystem->Open(FileName)) == NULL) {
+    printf("Perf test: unable to open file %s\n", FileName);
+    delete [] buffer;
+    return;
+    }
+    for (i = 0; i < FileSize2; i += ContentSize2) {
+        numBytes = openFile->Read(buffer, ContentSize2);
+        if (numBytes < 10) {
+            printf("Perf test: unable to read %s\n", FileName);
+            delete openFile;
+            delete [] buffer;
+            return;
+        }
+        //buffer[numBytes] = '\0';
+        //printf("Content read by %s (%d Bytes): %s\n", currentThread->getName(), numBytes, buffer);
+    }
+    delete [] buffer;
+    delete openFile;    // close file
+    fileSystem->Remove(FileName);
+}
 void
 PerformanceTest()
 {
     printf("Starting file system performance test:\n");
     stats->Print();
     FileWrite();
+    /*
+    Thread *t2 = new Thread("writer1");
+    t2->Fork(TestWrite, 2);
+    Thread *t1 = new Thread("reader1");
+    t1->Fork(TestRead, 1);
+    Thread *t4 = new Thread("writer2");
+    t4->Fork(TestWrite, 4);
+    Thread *t3 = new Thread("reader2");
+    t3->Fork(TestRead, 3);
+    */
     FileRead();
+    
+    //fileSystem->Print();
+    
     if (!fileSystem->Remove(FileName)) {
       printf("Perf test: unable to remove %s\n", FileName);
       return;
